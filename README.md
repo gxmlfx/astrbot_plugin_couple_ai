@@ -1,158 +1,148 @@
-# 情侣 AI · 跨房间任务与日记（astrbot_plugin_couple_ai）
+# 情侣 AI · 跨房间任务与日记
 
-让 AstrBot 的多个会话像同一个人：
+一个给 AstrBot 用的多会话插件：让不同私聊、群聊像同一个人一样记事、传话和写日记。
 
-- **跨房间任务**：在一个会话里让另一个会话在指定时间收到一句话/提醒
-- **目标语气生成**：所有传话强制由目标会话的人格用自己的语气生成，不再提供原样直发
-- **共享事件日志 + 水印**：Bot 每次发言进入事件环，其他会话按自己的 watermark 增量看到「我最近在别处做了什么」
-- **每日日记**：到点生成 Markdown 日记，保存并发送到指定会话
-- **WebUI**：创建/取消/重试任务，查看与清空事件，生成/查看日记
-- **可扩展**：`events`、`tasks`、`diaries`、`webui` 分层
+- **跨房间任务**：让另一个会话在指定时间收到一句话或提醒
+- **目标语气生成**：传话由目标会话绑定的人格和模型生成，不是原样转发
+- **共享事件日志**：Bot 在任意会话发言后进入事件环，其他会话按自己的水印看到「最近在别处做了什么」
+- **每日日记**：按设定时间生成 Markdown 日记，保存并发送到指定会话
+- **WebUI**：创建、取消、重试任务，查看事件和日记，修改插件设置
+- **模块化**：任务、事件、日记各自独立，方便继续扩展
+
+## 适用场景
+
+- 两个私聊 + 一个小群，希望它们共享一点上下文
+- 想让 Bot 在 A 会话说的事，过一会儿在 B 会话被提起
+- 想要每天一篇日记，而不是一堆零散聊天记录
 
 ## 安装
 
-### 方式一：AstrBot WebUI（推荐）
+### 从链接安装
 
-1. 把本目录打包成 zip（或上传到 GitHub 后填仓库地址）
-2. AstrBot WebUI → 插件 → 安装插件 → 从文件/URL 安装
-3. 重启 AstrBot
+在 AstrBot WebUI 中打开「插件」→「安装插件」→「从链接安装」，填入：
 
-### 方式二：手动
+```text
+https://github.com/gxmlfx/astrbot_plugin_couple_ai
+```
+
+安装完成后重启 AstrBot。
+
+### 手动安装
 
 ```bash
-cp -r astrbot-plugin-couple-ai ~/astrbot/data/plugins/astrbot_plugin_couple_ai
+cp -r astrbot_plugin_couple_ai ~/astrbot/data/plugins/
 docker restart astrbot
 ```
 
-## WebUI 设置
+要求：
 
-插件页面顶部有「设置」：
+- AstrBot >= 4.14.0
+- Python >= 3.10
 
-- 启用插件、记录事件、只允许三个会话
-- 平台 ID、我的 QQ、对方 QQ、小群号、三个称呼
-- 事件注入条数/字数/保留条数
-- 任务内容上限/待处理上限/检查间隔/消息前缀
-- 每日日记开关、时间、目标 UMO
-- 停用外部跨房间工具（保存后需重启 AstrBot 生效）
+## 快速开始
 
-保存后会同步生成 `session_labels`、`allow_sessions` 和 `diary_target`，不需要手写 UMO。
+1. 打开 AstrBot WebUI → 插件 → 情侣 AI
+2. 在「设置」里填写你的 QQ、对方 QQ、群号和称呼
+3. 打开「只允许这三个会话」，或按需关闭
+4. 保存后，直接在任意会话里说：
 
-页面同时跟随系统浅色/深色模式。
-
-## 使用
-
-### 1. 让模型创建任务
-
-在任意会话里说：
-
-> 跟对方说：今晚不回去吃饭了  
-> 明天早上八点提醒她带伞  
-> 把这句话带到小群：……
-
-模型会调用 `couple_task_create`：
-
-```json
-{
-  "to_session": "default:FriendMessage:<目标QQ>",
-  "text": "今晚不回去吃饭了",
-  "due_at": "",
-  "kind": "notify"
-}
+```text
+跟对方说：今晚不回去吃饭了
+明天早上八点提醒她带伞
+把这句话带到小群：……
 ```
 
-### 2. 会话 UMO
+也可以直接在 WebUI 里创建任务。
 
-AstrBot 的会话 ID 格式是：
+## WebUI
 
-```
+插件页面包含：
+
+- **设置**：功能开关、QQ/群号、称呼、事件与任务参数、日记设置
+- **任务**：创建、取消、重试、标记完成
+- **事件**：查看最近事件、清空
+- **日记**：生成、查看、删除
+
+页面会跟随系统浅色/深色模式。
+
+## 会话 UMO
+
+AstrBot 用 UMO 标识一个会话：
+
+```text
 platform_id:MessageType:session_id
 ```
 
-例如：
+常见例子：
 
-```
-default:FriendMessage:<你的QQ>
-default:FriendMessage:<对方QQ>
+```text
+default:FriendMessage:<QQ号>
 default:GroupMessage:<群号>
 ```
 
-在 WebUI「会话管理」里可以直接复制 UMO。
+在 AstrBot 的会话管理里可以直接复制 UMO。
 
-### 3. WebUI
+## 模型工具
 
-AstrBot WebUI → 插件 → 情侣 AI → 打开页面：
+插件向模型注册了四个工具：
 
-- 新建任务：填目标 UMO、内容、时间（留空立即）
-- 任务列表：取消 / 重试 / 标记完成
-- 事件日志：查看 / 清空
+| 工具 | 作用 |
+| --- | --- |
+| `couple_task_create` | 创建跨会话任务 |
+| `couple_task_list` | 查看当前会话相关任务 |
+| `couple_task_cancel` | 取消未发送任务 |
+| `couple_task_ack` | 确认已处理发给自己的任务 |
+
+模型会在合适的时候自动调用，不需要手动输入工具名。
 
 ## 配置
 
-在 AstrBot 插件配置里：
+大部分配置可以直接在 WebUI 的「设置」里改。
 
 | 配置 | 说明 |
 | --- | --- |
-| `enabled` | 总开关 |
-| `event_log_enabled` | 记录事件 |
-| `event_inject_count` | 每次 LLM 请求注入最近几条，默认 5 |
+| `enabled` | 插件总开关 |
+| `allow_sessions` | 允许的会话 UMO，每行一个；留空表示不限制 |
+| `session_labels` | `UMO=别名`，用于显示 |
+| `platform_id` | 平台 ID，默认 `default` |
+| `owner_qq` / `partner_qq` / `group_id` | 用于生成三个会话的 UMO |
+| `owner_name` / `partner_name` / `group_name` | 三个会话的显示称呼 |
+| `restrict_sessions` | 是否只允许上面三个会话 |
+| `event_log_enabled` | 是否记录事件 |
+| `event_inject_count` | 每次模型请求注入最近几条事件，默认 5 |
 | `event_max_chars` | 单条事件最大字数，默认 80 |
 | `event_keep` | 事件环保留条数，默认 200 |
-| `allow_sessions` | 允许的会话 UMO，每行一个；留空不限制 |
-| `session_labels` | `UMO=别名`，用于显示 |
-| `task_max_pending` | 目标会话待处理上限 |
+| `task_max_pending` | 单个会话待处理任务上限 |
 | `task_max_chars` | 任务内容最大字数 |
-| `check_interval_seconds` | 任务轮询间隔 |
-| `deliver_prefix` | 任务消息前缀，默认空 |
-| `disable_external_relay_tools` | 停用 private_companion 的 pc_send_to_group / pc_relay_message 等，避免和本插件抢路 |
+| `check_interval_seconds` | 任务检查间隔 |
 | `task_retry_seconds` | 任务失败重试间隔 |
 | `task_max_attempts` | 任务最大尝试次数 |
+| `deliver_prefix` | 任务消息前缀，默认空 |
+| `disable_external_relay_tools` | 停用其他插件的跨房间转发工具，避免重复发送 |
 | `diary_enabled` | 启用每日日记 |
 | `diary_time` | 日记生成时间，如 `23:00` |
-| `diary_target` | 日记接收 UMO |
+| `diary_target` | 日记接收会话的 UMO |
 | `diary_max_chars` | 文件发送失败时的文本回退上限 |
 
-## 日记文件发送（重要）
+## 说明
 
-AstrBot 的 `File` 组件走 `callback_api_base` 的 file service，而不是把本地路径直接丢给协议端。
+- 传话会用目标会话的人格和当前模型生成，但**不会携带目标会话的完整聊天历史**；如果需要更强上下文，可以再接 conversation manager
+- 事件日志记录的是 Bot 的发言摘要，不是完整聊天记录
+- 任务失败会按配置重试，成功后标记为完成，也可以用 `couple_task_ack` 手动确认
+- 日记以 Markdown 文件发送；如果协议端访问不到 AstrBot 的文件服务，会自动回退为文本
+- 任务默认不区分静默时段，需要的话可以在调用侧控制
 
-在 AstrBot 配置里设置：
+## 目录结构
 
-```json
-"callback_api_base": "http://<协议端能访问的 AstrBot 地址>:6185"
-```
-
-- Docker 同机：`http://172.17.0.1:6185`（Linux docker0 网关）
-- 其他部署：填 AstrBot WebUI 的公网/内网地址
-- 没配或协议端访问不到：插件会自动回退成文本发送，不会卡住
-
-这样不同用户不需要共享卷，也不需要把 AstrBot 文件目录挂给协议端。
-
-## 当前边界
-
-- `target_voice` 用目标会话的人格 + 当前 provider 生成，**不携带目标会话的完整聊天历史**；需要更强上下文可以后续接 conversation manager
-- 任务失败会按 `task_retry_seconds` 重试，最多 `task_max_attempts` 次；成功即 done（也可用 `couple_task_ack` 手动确认）
-- 事件日志记录 Bot 的**发言摘要**，不是聊天记录；按会话 watermark 增量注入
-- 日记文件发送使用 AstrBot 的 **file service**：需要把 `callback_api_base` 配成协议端能访问的地址
-  （例如 `http://172.17.0.1:6185`），不需要给每个用户加共享卷；为空或协议端访问不到时自动回退文本
-- 任务默认不过滤静默时段
-
-## 上传到 AstrBot 插件库
-
-1. 建 GitHub 仓库（名字建议 `astrbot_plugin_couple_ai`）
-2. 推到仓库，确认根目录有 `metadata.yaml`、`main.py`、`_conf_schema.json`、`pages/`
-3. 到 AstrBot 插件市场/仓库提交你的仓库地址
-4. 之后用户可以在 AstrBot WebUI 里直接搜索/安装
-
-仓库结构：
-
-```
+```text
 astrbot_plugin_couple_ai/
 ├── metadata.yaml
 ├── main.py
 ├── _conf_schema.json
 ├── README.md
 ├── LICENSE
-└── pages/couple/index.html
+└── pages/couple/
+    ├── index.html
     ├── app.js
     └── style.css
 ```
