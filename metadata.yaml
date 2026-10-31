@@ -1,0 +1,20 @@
+name: couple_ai
+display_name: 情侣 AI · 跨房间任务
+short_desc: 跨会话任务、目标语气生成、事件水印与每日日记，让多个会话像同一个人
+desc: >-
+  为情侣/多会话场景提供跨房间任务、共享事件流与每日日记：一个会话里可以让
+  另一个会话在指定时间收到一条话，并让目标会话用自己的人格生成；每次发言
+  会进入共享事件环，其他会话按会话水印看到「我最近在别处做了什么」。自带
+  WebUI 管理任务、事件和日记。
+version: 0.4.2
+author: gxmlfx
+repo: https://github.com/gxmlfx/astrbot_plugin_couple_ai
+astrbot_version: ">=4.14.0"
+tags:
+  - 情侣
+  - 跨会话
+  - 任务
+  - 事件日志
+  - WebUI
+support_platforms:
+  - aiocqhttp

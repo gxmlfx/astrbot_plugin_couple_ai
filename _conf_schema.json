@@ -1,0 +1,147 @@
+{
+  "enabled": {
+    "description": "启用跨房间任务与事件日志",
+    "type": "bool",
+    "default": true
+  },
+  "event_log_enabled": {
+    "description": "记录跨会话事件",
+    "hint": "记录 Bot 在每个会话发出的文字，作为「我最近在别处」共享给其他会话。",
+    "type": "bool",
+    "default": true
+  },
+  "event_inject_count": {
+    "description": "注入最近事件条数",
+    "hint": "每次 LLM 请求前注入多少条其他会话的事件；0 表示关闭注入。",
+    "type": "int",
+    "default": 5
+  },
+  "event_max_chars": {
+    "description": "单条事件最大字数",
+    "type": "int",
+    "default": 80
+  },
+  "event_keep": {
+    "description": "事件保留条数",
+    "hint": "事件环最多保留多少条，超出后自动删除最旧的。",
+    "type": "int",
+    "default": 200
+  },
+  "allow_sessions": {
+    "description": "允许的会话",
+    "hint": "每行一个会话 UMO（如 default:FriendMessage:<QQ号>）；留空表示不限制。",
+    "type": "text",
+    "default": ""
+  },
+  "session_labels": {
+    "description": "会话别名",
+    "hint": "每行一个「UMO=别名」，用于任务和事件里的可读名称。",
+    "type": "text",
+    "default": ""
+  },
+  "task_max_pending": {
+    "description": "单会话待处理任务上限",
+    "type": "int",
+    "default": 20
+  },
+  "task_max_chars": {
+    "description": "任务内容最大字数",
+    "type": "int",
+    "default": 200
+  },
+  "check_interval_seconds": {
+    "description": "任务检查间隔（秒）",
+    "type": "int",
+    "default": 10
+  },
+  "deliver_prefix": {
+    "description": "任务消息前缀",
+    "hint": "留空则原样发送；需要让目标会话知道这是传话时可填，例如「（传话）」。",
+    "type": "string",
+    "default": ""
+  },
+  "task_retry_seconds": {
+    "description": "任务失败重试间隔（秒）",
+    "type": "int",
+    "default": 60
+  },
+  "task_max_attempts": {
+    "description": "任务最大尝试次数",
+    "type": "int",
+    "default": 3
+  },
+  "diary_enabled": {
+    "description": "启用每日日记",
+    "type": "bool",
+    "default": false
+  },
+  "diary_time": {
+    "description": "日记生成时间",
+    "hint": "24 小时制 HH:MM；到点后如果当天还没生成就生成一次。",
+    "type": "string",
+    "default": "23:00"
+  },
+  "diary_target": {
+    "description": "日记接收会话",
+    "hint": "填 UMO，例如 default:FriendMessage:<QQ号>；留空不发送。",
+    "type": "string",
+    "default": ""
+  },
+  "diary_max_chars": {
+    "description": "日记文本回退上限",
+    "hint": "文件发送失败时，最多发送多少字。",
+    "type": "int",
+    "default": 4000
+  },
+  "disable_external_relay_tools": {
+    "description": "停用外部跨房间工具",
+    "hint": "启用后停用 private_companion 的 pc_send_to_group / pc_relay_message 等，避免和 couple_task_create 抢路。",
+    "type": "bool",
+    "default": false
+  },
+  "platform_id": {
+    "description": "平台 ID",
+    "hint": "AstrBot 的 platform_id，默认 default；UMO 形如 default:FriendMessage:<QQ号>。",
+    "type": "string",
+    "default": "default"
+  },
+  "owner_qq": {
+    "description": "我的 QQ",
+    "hint": "只填数字；用于生成私人会话 UMO 和白名单。",
+    "type": "string",
+    "default": ""
+  },
+  "partner_qq": {
+    "description": "对方 QQ",
+    "hint": "只填数字；用于生成私人会话 UMO 和白名单。",
+    "type": "string",
+    "default": ""
+  },
+  "group_id": {
+    "description": "小群号",
+    "hint": "只填数字；用于生成群会话 UMO 和白名单。",
+    "type": "string",
+    "default": ""
+  },
+  "owner_name": {
+    "description": "我的称呼",
+    "type": "string",
+    "default": "我"
+  },
+  "partner_name": {
+    "description": "对方称呼",
+    "type": "string",
+    "default": "对方"
+  },
+  "group_name": {
+    "description": "小群称呼",
+    "type": "string",
+    "default": "小群"
+  },
+  "restrict_sessions": {
+    "description": "只允许这三个会话",
+    "hint": "开启后，白名单只包含上面三个 UMO；关闭则不限制。",
+    "type": "bool",
+    "default": true
+  }
+}

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>情侣 AI · 跨房间任务</title>
+    <link rel="stylesheet" href="./style.css?v=0.4.2" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">COUPLE AI</p>
+          <h1>跨房间任务与事件</h1>
+          <p class="sub">
+            让不同会话像同一个人：一边把话带给另一边，一边记住「我最近在别处做了什么」。
+          </p>
+        </div>
+        <div class="stats" id="stats">
+          <div class="stat"><span id="stat-pending">0</span><small>待发送</small></div>
+          <div class="stat"><span id="stat-sent">0</span><small>已发送</small></div>
+          <div class="stat"><span id="stat-done">0</span><small>已完成</small></div>
+          <div class="stat"><span id="stat-events">0</span><small>事件</small></div>
+          <div class="stat"><span id="stat-diaries">0</span><small>日记</small></div>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>设置</h2>
+          <span class="hint">保存后立即生效；停用外部工具需重启 AstrBot</span>
+        </div>
+        <form id="config-form" class="form settings-grid">
+          <label class="check"><input type="checkbox" id="cfg-enabled" /> 启用插件</label>
+          <label class="check"><input type="checkbox" id="cfg-restrict" /> 只允许这三个会话</label>
+          <label class="check"><input type="checkbox" id="cfg-disable-external" /> 停用外部跨房间工具</label>
+          <label class="check"><input type="checkbox" id="cfg-event-log" /> 记录事件</label>
+
+          <label>平台 ID<input id="cfg-platform" placeholder="default" /></label>
+          <label>我的 QQ<input id="cfg-owner-qq" inputmode="numeric" placeholder="只填数字" /></label>
+          <label>对方 QQ<input id="cfg-partner-qq" inputmode="numeric" placeholder="只填数字" /></label>
+          <label>小群号<input id="cfg-group-id" inputmode="numeric" placeholder="只填数字" /></label>
+          <label>我的称呼<input id="cfg-owner-name" placeholder="我" /></label>
+          <label>对方称呼<input id="cfg-partner-name" placeholder="对方" /></label>
+          <label>小群称呼<input id="cfg-group-name" placeholder="小群" /></label>
+          <label>任务内容上限<input id="cfg-task-chars" type="number" min="20" max="500" /></label>
+
+          <label>事件注入条数<input id="cfg-inject" type="number" min="0" max="10" /></label>
+          <label>单条事件字数<input id="cfg-event-chars" type="number" min="20" max="200" /></label>
+          <label>事件保留条数<input id="cfg-event-keep" type="number" min="20" max="500" /></label>
+          <label>任务检查间隔（秒）<input id="cfg-interval" type="number" min="3" max="300" /></label>
+          <label>单会话待处理上限<input id="cfg-task-pending" type="number" min="1" max="100" /></label>
+          <label>任务消息前缀<input id="cfg-prefix" placeholder="可留空" /></label>
+          <label class="check"><input type="checkbox" id="cfg-diary" /> 启用每日日记</label>
+          <label>日记时间<input id="cfg-diary-time" placeholder="23:00" /></label>
+          <label class="wide">日记目标 UMO<input id="cfg-diary-target" placeholder="default:FriendMessage:&lt;QQ号&gt;" /></label>
+          <div class="actions wide">
+            <button type="submit" class="primary">保存设置</button>
+            <span id="config-msg" class="msg"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <div class="card-head">
+            <h2>新建任务</h2>
+            <span class="hint">目标会话 UMO，例如 default:FriendMessage:&lt;目标QQ&gt;</span>
+          </div>
+          <form id="task-form" class="form">
+            <label>
+              目标会话
+              <input id="to_session" name="to_session" placeholder="default:FriendMessage:<目标QQ>" required />
+            </label>
+            <label>
+              内容
+              <textarea id="text" name="text" rows="3" maxlength="200" placeholder="帮我把这句话带给她：……" required></textarea>
+            </label>
+            <div class="row">
+              <label>
+                时间
+                <input id="due_at" name="due_at" type="datetime-local" />
+                <small class="hint">留空 = 立即</small>
+              </label>
+              <label>
+                类型
+                <select id="kind" name="kind">
+                  <option value="notify">通知</option>
+                  <option value="remind">提醒</option>
+                </select>
+              </label>
+            </div>
+            <div class="actions">
+              <button type="submit" class="primary">创建任务</button>
+              <span id="form-msg" class="msg"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>事件日志</h2>
+            <button id="clear-events" class="ghost" type="button">清空</button>
+          </div>
+          <p class="hint">
+            这里记录 Bot 在各会话发出的文字；其他会话的 LLM 请求前会看到最近几条「我最近在别处」。
+          </p>
+          <ul id="events" class="event-list"></ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>日记</h2>
+          <div class="actions">
+            <button id="diary-generate" class="ghost" type="button">生成今天的日记</button>
+            <button id="diary-refresh" class="ghost" type="button">刷新</button>
+          </div>
+        </div>
+        <div class="grid diary-grid">
+          <ul id="diaries" class="event-list diary-list"></ul>
+          <pre id="diary-preview" class="diary-preview">选择一篇日记查看</pre>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>任务列表</h2>
+          <button id="refresh" class="ghost" type="button">刷新</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>从</th>
+                <th>到</th>
+                <th>内容</th>
+                <th>时间</th>
+                <th>尝试</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tasks"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="./app.js?v=0.4.2"></script>
+  </body>
+</html>
