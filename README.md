@@ -36,7 +36,7 @@ docker restart astrbot
 
 要求：
 
-- AstrBot >= 4.14.0
+- AstrBot >= 4.24.0
 - Python >= 3.10
 
 ## 快速开始

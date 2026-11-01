@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- 事件上下文改用 `extra_user_content_parts` + `mark_as_temp()` 注入，不再修改 system prompt，恢复提示词缓存
+- 最低 AstrBot 版本提高到 4.24.0
+
 ## 0.4.2
 
 - 日记提示与导出文件名改为通用文案，移除个人称呼

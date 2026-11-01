@@ -15,6 +15,7 @@ import astrbot.api.star as star
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import File, Plain
+from astrbot.core.agent.message import TextPart
 from quart import jsonify, request
 
 PLUGIN_NAME = "couple_ai"
@@ -643,10 +644,33 @@ class CoupleAIPlugin(star.Star):
         if not self.enabled or not self._cfg("event_log_enabled", True):
             return
         block, max_id = self._events_block(event.unified_msg_origin)
-        if block:
-            req.system_prompt = (getattr(req, "system_prompt", "") or "") + "\n\n" + block
-            if max_id:
-                self._set_watermark(event.unified_msg_origin, max_id)
+        if not block:
+            return
+
+        parts = getattr(req, "extra_user_content_parts", None)
+        if parts is None:
+            # AstrBot < 4.24 没有这个能力。不要回退到修改 system_prompt，
+            # 否则会破坏提示词缓存；直接跳过，等兼容版本再注入。
+            logger.warning(
+                "[couple_ai] 当前 AstrBot 不支持 extra_user_content_parts，跳过事件注入"
+            )
+            return
+
+        try:
+            part = TextPart(text=block)
+            # 当前 API 是 mark_as_temp()；兼容审核说明里的 make_as_temp()。
+            marker = getattr(part, "mark_as_temp", None) or getattr(
+                part, "make_as_temp", None
+            )
+            if callable(marker):
+                part = marker() or part
+            parts.append(part)
+        except Exception:
+            logger.exception("[couple_ai] 注入事件上下文失败")
+            return
+
+        if max_id:
+            self._set_watermark(event.unified_msg_origin, max_id)
 
     @filter.on_decorating_result()
     async def _log_outgoing(self, event: AstrMessageEvent) -> None:
