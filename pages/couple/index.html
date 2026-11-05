@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>情侣 AI · 跨房间任务</title>
-    <link rel="stylesheet" href="./style.css?v=0.4.2" />
+    <link rel="stylesheet" href="./style.css?v=0.5.0" />
   </head>
   <body>
     <main class="page">
@@ -65,12 +65,12 @@
         <div class="card">
           <div class="card-head">
             <h2>新建任务</h2>
-            <span class="hint">目标会话 UMO，例如 default:FriendMessage:&lt;目标QQ&gt;</span>
+            <span class="hint">填 QQ 号即可；填设置里的小群号会自动识别成群聊</span>
           </div>
           <form id="task-form" class="form">
             <label>
-              目标会话
-              <input id="to_session" name="to_session" placeholder="default:FriendMessage:<目标QQ>" required />
+              目标 QQ 号 / 群号
+              <input id="to_session" name="to_session" placeholder="123456789" inputmode="numeric" required />
             </label>
             <label>
               内容
@@ -85,9 +85,10 @@
               <label>
                 类型
                 <select id="kind" name="kind">
-                  <option value="notify">通知</option>
-                  <option value="remind">提醒</option>
+                  <option value="notify">传话（自然带一句）</option>
+                  <option value="remind">提醒（明确提醒）</option>
                 </select>
+                <small class="hint">传话=自然带一句；提醒=明确提醒对方</small>
               </label>
             </div>
             <div class="actions">
@@ -103,7 +104,7 @@
             <button id="clear-events" class="ghost" type="button">清空</button>
           </div>
           <p class="hint">
-            这里记录 Bot 在各会话发出的文字；其他会话的 LLM 请求前会看到最近几条「我最近在别处」。
+            记录你（用户）和 Bot 在各会话的发言；每行都会标明说话人。其他会话的 LLM 请求前会看到最近几条「我最近在别处」。
           </p>
           <ul id="events" class="event-list"></ul>
         </div>
@@ -114,6 +115,7 @@
           <h2>日记</h2>
           <div class="actions">
             <button id="diary-generate" class="ghost" type="button">生成今天的日记</button>
+            <button id="diary-regenerate" class="ghost" type="button">重写全部日记</button>
             <button id="diary-refresh" class="ghost" type="button">刷新</button>
           </div>
         </div>
@@ -147,6 +149,6 @@
         </div>
       </section>
     </main>
-    <script src="./app.js?v=0.4.2"></script>
+    <script src="./app.js?v=0.5.0"></script>
   </body>
 </html>

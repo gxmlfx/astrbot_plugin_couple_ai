@@ -6,7 +6,7 @@ desc: >-
   另一个会话在指定时间收到一条话，并让目标会话用自己的人格生成；每次发言
   会进入共享事件环，其他会话按会话水印看到「我最近在别处做了什么」。自带
   WebUI 管理任务、事件和日记。
-version: 0.4.3
+version: 0.5.0
 author: gxmlfx
 repo: https://github.com/gxmlfx/astrbot_plugin_couple_ai
 astrbot_version: ">=4.24.0"

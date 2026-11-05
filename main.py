@@ -7,7 +7,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +85,18 @@ class CoupleAIPlugin(star.Star):
                 result[key.strip()] = value.strip()
         return result
 
+    def _normalize_legacy_umo(self, umo: str) -> str:
+        """兼容旧实例的 private:/group: 会话键。"""
+        text = str(umo or "")
+        platform = str(self._cfg("platform_id", "default") or "default").strip() or "default"
+        if text.startswith("private:"):
+            return f"{platform}:FriendMessage:{text.split(':', 1)[1]}"
+        if text.startswith("group:"):
+            return f"{platform}:GroupMessage:{text.split(':', 1)[1]}"
+        return text
+
     def _label(self, umo: str) -> str:
+        umo = self._normalize_legacy_umo(umo)
         labels = self._labels()
         if umo in labels:
             return labels[umo]
@@ -102,6 +113,20 @@ class CoupleAIPlugin(star.Star):
         allowed = {line.strip() for line in raw.splitlines() if line.strip()}
         return umo in allowed
 
+    def _target_umo(self, raw: str) -> str:
+        """把 WebUI 里填的 QQ/群号转成 UMO；完整 UMO 原样保留。"""
+        value = str(raw or "").strip()
+        if ":" in value:
+            return value
+        digits = re.sub(r"\D", "", value)
+        if not digits:
+            return value
+        platform = str(self._cfg("platform_id", "default") or "default").strip() or "default"
+        group_id = str(self._cfg("group_id", "") or "").strip()
+        if digits == group_id:
+            return f"{platform}:GroupMessage:{digits}"
+        return f"{platform}:FriendMessage:{digits}"
+
     # ── 数据库 ────────────────────────────────────────────────────────────
     def _init_db(self) -> None:
         with self._lock:
@@ -112,7 +137,8 @@ class CoupleAIPlugin(star.Star):
                     ts REAL NOT NULL,
                     umo TEXT NOT NULL,
                     kind TEXT NOT NULL DEFAULT 'say',
-                    text TEXT NOT NULL
+                    text TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'bot'
                 );
                 CREATE TABLE IF NOT EXISTS tasks (
                     id TEXT PRIMARY KEY,
@@ -159,10 +185,18 @@ class CoupleAIPlugin(star.Star):
             ):
                 if column not in existing:
                     self._conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} {ddl}")
+            event_columns = {
+                row[1] for row in self._conn.execute("PRAGMA table_info(events)").fetchall()
+            }
+            if "role" not in event_columns:
+                # 旧数据只有 Bot 的发言，默认按 bot 迁移。
+                self._conn.execute(
+                    "ALTER TABLE events ADD COLUMN role TEXT NOT NULL DEFAULT 'bot'"
+                )
             self._conn.commit()
 
     # ── 事件 ─────────────────────────────────────────────────────────────
-    def _add_event(self, umo: str, kind: str, text: str) -> None:
+    def _add_event(self, umo: str, kind: str, text: str, role: str = "bot") -> None:
         if not self._cfg("event_log_enabled", True):
             return
         limit = max(1, int(self._cfg("event_max_chars", 80)))
@@ -172,8 +206,8 @@ class CoupleAIPlugin(star.Star):
         keep = max(20, int(self._cfg("event_keep", 200)))
         with self._lock:
             self._conn.execute(
-                "INSERT INTO events(ts, umo, kind, text) VALUES(?,?,?,?)",
-                (_now(), umo, kind, clean),
+                "INSERT INTO events(ts, umo, kind, text, role) VALUES(?,?,?,?,?)",
+                (_now(), umo, kind, clean, role),
             )
             self._conn.execute(
                 "DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT ?)",
@@ -205,7 +239,7 @@ class CoupleAIPlugin(star.Star):
         with self._lock:
             rows = self._conn.execute(
                 "SELECT id, ts, umo, kind, text FROM events "
-                "WHERE id > ? AND umo != ? ORDER BY id ASC LIMIT ?",
+                "WHERE id > ? AND umo != ? AND role='bot' ORDER BY id ASC LIMIT ?",
                 (last_id, umo, max(1, count)),
             ).fetchall()
         if not rows:
@@ -256,6 +290,9 @@ class CoupleAIPlugin(star.Star):
     ) -> tuple[dict | None, str]:
         if not self.enabled:
             return None, "插件未启用"
+        kind = str(kind or "notify").strip().lower()
+        if kind not in ("notify", "remind"):
+            kind = "notify"
         if not to_umo or ":" not in to_umo:
             return None, "目标会话 UMO 格式应为 platform:MessageType:session_id"
         if to_umo == from_umo:
@@ -289,7 +326,7 @@ class CoupleAIPlugin(star.Star):
                     task_id,
                     from_umo,
                     to_umo,
-                    kind or "notify",
+                    kind,
                     clean,
                     due,
                     "pending",
@@ -348,12 +385,22 @@ class CoupleAIPlugin(star.Star):
 
     async def _target_voice(self, task: dict) -> str:
         persona = await self._persona_prompt()
+        if task["kind"] == "remind":
+            intent = (
+                "\n这是一条提醒：请明确提醒对方这件事，语气可以自然，"
+                "但要让对方意识到这是提醒，不要写成普通闲聊。"
+            )
+        else:
+            intent = (
+                "\n这是一条普通传话：自然带一句就好，不要用提醒、催促或命令的口吻。"
+            )
         system = (
             persona
             + "\n\n【跨房间传话】你收到一条来自 "
             + self._label(task["from_umo"])
             + " 的传话/提醒。请用你自己的语气，把这件事自然地告诉当前会话里的人；"
             "不要提“任务/系统/插件/日志”，不要复述格式；只说这一件事。"
+            + intent
         )
         prompt = (
             f"传话类型：{task['kind']}\n"
@@ -383,7 +430,7 @@ class CoupleAIPlugin(star.Star):
                 sent_at=_now(),
                 error=None,
             )
-            self._add_event(task["to_umo"], "task", text)
+            self._add_event(task["to_umo"], "task", text, role="bot")
             logger.info("[couple_ai] 任务 %s 已完成 %s -> %s", task["id"], task["from_umo"], task["to_umo"])
         except Exception as exc:
             error = str(exc)[:180]
@@ -443,27 +490,52 @@ class CoupleAIPlugin(star.Star):
             logger.exception("[couple_ai] 日记生成/发送失败")
 
     async def _generate_diary(self, date: str) -> str:
-        start = _now() - 86400
+        try:
+            day = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            return ""
+        start = day.timestamp()
+        end = (day + timedelta(days=1)).timestamp()
         with self._lock:
             rows = self._conn.execute(
-                "SELECT ts, umo, kind, text FROM events WHERE ts >= ? ORDER BY id ASC LIMIT 200",
-                (start,),
+                "SELECT ts, umo, kind, text, role FROM events "
+                "WHERE ts >= ? AND ts < ? AND kind != 'diary' "
+                "ORDER BY id ASC LIMIT 500",
+                (start, end),
             ).fetchall()
-        lines = []
+        bot_lines = []
+        user_lines = []
         for row in rows:
             stamp = datetime.fromtimestamp(row["ts"]).strftime("%H:%M")
-            lines.append(f"- {stamp} {self._label(row['umo'])}：{row['text']}")
+            label = self._label(row["umo"])
+            if row["role"] == "user":
+                user_lines.append(f"- {stamp} [会话：{label}] 用户说：{row['text']}")
+            else:
+                action = "传话" if row["kind"] == "task" else "说"
+                bot_lines.append(
+                    f"- {stamp} [会话：{label}] 我{action}：{row['text']}"
+                )
         persona = await self._persona_prompt()
         system = (
             persona
             + "\n\n【今日日记】请写一篇 Markdown 日记，第一人称、符合当前人格的口吻。"
-            "重点记录你关心的两个人今天发生的事、你说过/听到的话、你的观察和感受；"
-            "素材只来自下面的事件，不要编造；没有素材就写短一点。"
+            "重点记录今天发生的事、你说过/听到的话、你的观察和感受；"
+            "素材只来自下面的事件，不要编造；没有素材就写短一点。\n"
+            "【硬性规则】\n"
+            "1. 只能使用下面的两组素材；不要从人格设定、长期记忆或常识里补充当天对话。\n"
+            "2. 「我说过的话」里的内容只能写成「我说」；绝不能写成对方或用户说的。\n"
+            "3. 「用户说过的话」里的内容只能写成用户说；绝不能写成我说的。\n"
+            "4. 写「他说/对方说」前，必须确认内容在【用户说过的话】里；"
+            "写「我说」前，必须确认内容在【我说过的话】里。\n"
+            "5. 某一组是「没有」时，就写今天没有，不要编造。\n"
+            "6. 日记可以写感受和观察，但不能虚构对话。"
         )
         prompt = (
-            f"日期：{date}\n"
-            "今天的事件：\n"
-            + ("\n".join(lines) if lines else "- 今天没有记录到事件")
+            f"日期：{date}\n\n"
+            "【我说过的话】\n"
+            + ("\n".join(bot_lines) if bot_lines else "- 今天我没有说话")
+            + "\n\n【用户说过的话】\n"
+            + ("\n".join(user_lines) if user_lines else "- 今天用户没有说话")
             + "\n\n请输出完整 Markdown：标题、日期、分节（今天发生了什么 / 我想说的 / 关于他们俩）。"
         )
         content = await self._generate_text(self._cfg("diary_target", ""), prompt, system)
@@ -493,7 +565,7 @@ class CoupleAIPlugin(star.Star):
             limit = max(500, int(self._cfg("diary_max_chars", 4000)))
             sent = await self.context.send_message(target, MessageChain().message(content[:limit]))
         if sent:
-            self._add_event(target, "diary", f"写了 {date} 的日记")
+            self._add_event(target, "diary", f"写了 {date} 的日记", role="bot")
             logger.info("[couple_ai] 日记 %s 已发送 -> %s", date, target)
 
     async def _task_loop(self) -> None:
@@ -639,6 +711,17 @@ class CoupleAIPlugin(star.Star):
         return json.dumps({"ok": True, "id": task_id, "status": "done"}, ensure_ascii=False)
 
     # ── 钩子 ─────────────────────────────────────────────────────────────
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def _log_incoming(self, event: AstrMessageEvent) -> None:
+        if not self.enabled or not self._cfg("event_log_enabled", True):
+            return
+        if not self._allow(event.unified_msg_origin):
+            return
+        text = str(getattr(event, "message_str", "") or "").strip()
+        if not text:
+            return
+        self._add_event(event.unified_msg_origin, "say", text, role="user")
+
     @filter.on_llm_request()
     async def _inject_events(self, event: AstrMessageEvent, req: Any) -> None:
         if not self.enabled or not self._cfg("event_log_enabled", True):
@@ -685,7 +768,7 @@ class CoupleAIPlugin(star.Star):
                 if isinstance(comp, Plain)
             ).strip()
             if text:
-                self._add_event(event.unified_msg_origin, "say", text)
+                self._add_event(event.unified_msg_origin, "say", text, role="bot")
         except Exception:
             logger.exception("[couple_ai] 记录 outgoing 事件失败")
 
@@ -703,6 +786,7 @@ class CoupleAIPlugin(star.Star):
             ("diary/list", self._api_diary_list, ["GET"], "日记列表"),
             ("diary/read", self._api_diary_read, ["GET"], "读取日记"),
             ("diary/generate", self._api_diary_generate, ["POST"], "生成日记"),
+            ("diary/regenerate", self._api_diary_regenerate, ["POST"], "重写日记"),
             ("diary/delete", self._api_diary_delete, ["POST"], "删除日记"),
         ]
         # 同时注册 metadata name 和目录名：不同 AstrBot 版本的插件页上下文
@@ -839,7 +923,8 @@ class CoupleAIPlugin(star.Star):
                 "SELECT * FROM events ORDER BY id DESC LIMIT 60"
             ).fetchall()
             diary_rows = self._conn.execute(
-                "SELECT date, created_at, sent_to FROM diaries ORDER BY date DESC LIMIT 20"
+                "SELECT date, created_at, sent_to, length(content) AS size "
+                "FROM diaries ORDER BY date DESC LIMIT 20"
             ).fetchall()
             counts = {
                 "pending": self._conn.execute(
@@ -866,6 +951,12 @@ class CoupleAIPlugin(star.Star):
             item = dict(row)
             item["label"] = self._label(item["umo"])
             item["time_text"] = datetime.fromtimestamp(row["ts"]).strftime("%m-%d %H:%M")
+            item["role_label"] = "用户" if item.get("role") == "user" else "我"
+            item["kind_label"] = {
+                "say": "发言",
+                "task": "传话",
+                "diary": "日记",
+            }.get(item.get("kind"), item.get("kind"))
             events.append(item)
         diaries = []
         for row in diary_rows:
@@ -879,9 +970,10 @@ class CoupleAIPlugin(star.Star):
     async def _api_task_create(self):
         body = await request.get_json(silent=True) or {}
         from_umo = str(body.get("from_umo") or "webui").strip()
+        to_umo = self._target_umo(str(body.get("to_session") or "").strip())
         task, error = self._create_task(
             from_umo,
-            str(body.get("to_session") or "").strip(),
+            to_umo,
             str(body.get("text") or ""),
             body.get("due_at"),
             str(body.get("kind") or "notify"),
@@ -958,6 +1050,28 @@ class CoupleAIPlugin(star.Star):
             if target:
                 await self._send_diary(date, content, target)
         return jsonify({"ok": True, "date": date, "content": content})
+
+    async def _api_diary_regenerate(self):
+        body = await request.get_json(silent=True) or {}
+        dates = body.get("dates")
+        if not isinstance(dates, list) or not dates:
+            with self._lock:
+                dates = [
+                    row["date"]
+                    for row in self._conn.execute(
+                        "SELECT date FROM diaries ORDER BY date ASC"
+                    ).fetchall()
+                ]
+        results = []
+        for raw in dates:
+            date = str(raw or "").strip()
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+                continue
+            content = await self._generate_diary(date)
+            results.append(
+                {"date": date, "ok": bool(content), "chars": len(content or "")}
+            )
+        return jsonify({"ok": True, "results": results})
 
     async def _api_diary_delete(self):
         body = await request.get_json(silent=True) or {}

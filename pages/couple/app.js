@@ -37,9 +37,12 @@
     root.innerHTML = state.events
       .slice()
       .reverse()
-      .map(
-        (e) => `<li><span class="meta">${esc(e.time_text)} · ${esc(e.label)} · ${esc(e.kind)}</span>${esc(e.text)}</li>`
-      )
+      .map((e) => {
+        const isUser = e.role === "user";
+        const role = isUser ? "用户" : "我";
+        const kind = e.kind_label || e.kind || "";
+        return `<li><span class="meta">${esc(e.time_text)} · ${esc(e.label)} · <span class="role ${isUser ? "user" : "bot"}">${role}</span> · ${esc(kind)}</span>${esc(e.text)}</li>`;
+      })
       .join("");
   }
 
@@ -83,7 +86,7 @@
     }
     root.innerHTML = state.diaries
       .map(
-        (d) => `<li data-date="${esc(d.date)}"><span class="meta">${esc(d.date)} · ${esc(d.size)} 字</span>${esc(d.date)}</li>`
+        (d) => `<li data-date="${esc(d.date)}"><span class="meta">${esc(d.date)} · ${esc(d.size ?? 0)} 字</span>${esc(d.date)}</li>`
       )
       .join("");
   }
@@ -177,6 +180,24 @@
       if (!result.ok) throw new Error(result.error || "生成失败");
       $("diary-preview").textContent = result.content || "";
       setMsg("日记已生成并发送", "ok");
+      await load();
+    } catch (error) {
+      setMsg(error?.message || String(error), "err");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("diary-regenerate").addEventListener("click", async () => {
+    if (!confirm("用当前事件重写所有已有日记？原日记会被覆盖。")) return;
+    const button = $("diary-regenerate");
+    button.disabled = true;
+    setMsg("日记重写中…");
+    try {
+      const result = await api().apiPost("diary/regenerate", {});
+      if (!result.ok) throw new Error(result.error || "重写失败");
+      const done = (result.results || []).filter((x) => x.ok).length;
+      setMsg(`已重写 ${done} 篇日记`, "ok");
       await load();
     } catch (error) {
       setMsg(error?.message || String(error), "err");
