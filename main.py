@@ -920,7 +920,7 @@ class CoupleAIPlugin(star.Star):
                 "SELECT * FROM tasks ORDER BY created_at DESC LIMIT 100"
             ).fetchall()
             event_rows = self._conn.execute(
-                "SELECT * FROM events ORDER BY id DESC LIMIT 60"
+                "SELECT * FROM events ORDER BY ts DESC, id DESC LIMIT 60"
             ).fetchall()
             diary_rows = self._conn.execute(
                 "SELECT date, created_at, sent_to, length(content) AS size "
